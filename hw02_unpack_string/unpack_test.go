@@ -43,3 +43,41 @@ func TestUnpackInvalidString(t *testing.T) {
 		})
 	}
 }
+
+func TestUnpackRussian(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{input: "а4бв2г5д", expected: "аааабввгггггд"},
+		{input: "абввг", expected: "абввг"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			result, err := Unpack(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestUnpackCapitalLetters(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{input: "A4BC2D5E", expected: "AAAABCCDDDDDE"},
+		{input: "ABCCD", expected: "ABCCD"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			result, err := Unpack(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
