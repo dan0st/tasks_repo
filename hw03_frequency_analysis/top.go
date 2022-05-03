@@ -1,9 +1,18 @@
 package hw03frequencyanalysis
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var reg = regexp.MustCompile(`[^0-9a-z_а-я-]+`)
+
+func Filter(word string, reg *regexp.Regexp) string {
+	lowerWord := strings.ToLower(word)
+	result := reg.ReplaceAll([]byte(lowerWord), []byte(""))
+	return string(result)
+}
 
 func GetTop10(words map[string]int) []string {
 	type wordAmountStruct struct {
@@ -36,7 +45,11 @@ func Top10(s string) []string {
 	words := make(map[string]int)
 
 	for _, word := range splittedStr {
-		words[word]++
+		if word == "-" {
+			continue
+		}
+		filteredWord := Filter(word, reg)
+		words[filteredWord]++
 	}
 
 	return GetTop10(words)
