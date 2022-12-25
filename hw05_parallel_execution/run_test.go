@@ -64,7 +64,75 @@ func TestRun(t *testing.T) {
 		elapsedTime := time.Since(start)
 		require.NoError(t, err)
 
-		require.Equal(t, runTasksCount, int32(tasksCount), "not all tasks were completed")
+		require.Equal(t, int32(tasksCount), runTasksCount, "not all tasks were completed")
 		require.LessOrEqual(t, int64(elapsedTime), int64(sumTime/2), "tasks were run sequentially?")
+	})
+
+	t.Run("invalid worker count", func(t *testing.T) {
+		err := Run(nil, 0, 1)
+
+		require.ErrorIs(t, err, ErrInvalidWorkerCount)
+	})
+
+	t.Run("unlimited errors", func(t *testing.T) {
+		var runTaskCount int32
+
+		taskCount := 50
+		tasks := make([]Task, 0, taskCount)
+
+		for i := 0; i < taskCount; i++ {
+			err := fmt.Errorf("error in task with id - %d", i)
+			tasks = append(tasks, func() error {
+				defer atomic.AddInt32(&runTaskCount, 1)
+				time.Sleep(200 * time.Millisecond)
+				return err
+			})
+		}
+
+		workerCount := 10
+
+		err := Run(tasks, workerCount, 0)
+
+		require.NoError(t, err)
+		require.Equal(t, int32(taskCount), runTaskCount, "not all tasks were completed")
+	})
+
+	t.Run("tasks without errors but without sleep", func(t *testing.T) {
+		workerCount := 5
+		tasks := make([]Task, 0, workerCount)
+
+		var runTasksCount int32
+		waitChan := make(chan struct{})
+
+		for i := 0; i < workerCount; i++ {
+			tasks = append(tasks, func() error {
+				atomic.AddInt32(&runTasksCount, 1)
+				<-waitChan
+				return nil
+			})
+		}
+
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- Run(tasks, workerCount, 1)
+		}()
+
+		require.Eventually(t, func() bool {
+			return int32(workerCount) == atomic.LoadInt32(&runTasksCount)
+		}, time.Second*3, time.Millisecond, "tasks were run sequentially?")
+
+		close(waitChan)
+
+		var err error
+		require.Eventually(t, func() bool {
+			select {
+			case err = <-errChan:
+				return true
+			default:
+				return false
+			}
+		}, time.Second, time.Millisecond*100)
+
+		require.NoError(t, err, "error was received")
 	})
 }
