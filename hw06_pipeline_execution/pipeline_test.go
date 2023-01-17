@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 const (
@@ -14,6 +15,8 @@ const (
 )
 
 func TestPipeline(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	// Stage generator
 	g := func(_ string, f func(v interface{}) interface{}) Stage {
 		return func(in In) Out {
@@ -89,5 +92,66 @@ func TestPipeline(t *testing.T) {
 
 		require.Len(t, result, 0)
 		require.Less(t, int64(elapsed), int64(abortDur)+int64(fault))
+	})
+
+	t.Run("without stages", func(t *testing.T) {
+		in := make(Bi)
+		data := []int{1, 2, 3, 4, 5}
+
+		go func() {
+			for _, v := range data {
+				in <- v
+			}
+			close(in)
+		}()
+
+		result := make([]int, 0, 10)
+		for s := range ExecutePipeline(in, nil) {
+			result = append(result, s.(int))
+		}
+
+		require.Equal(t, data, result)
+	})
+
+	t.Run("nil stages", func(t *testing.T) {
+		in := make(Bi)
+		data := []int{1, 2, 3, 4, 5}
+
+		go func() {
+			for _, v := range data {
+				in <- v
+			}
+			close(in)
+		}()
+
+		result := make([]int, 0, 10)
+		for s := range ExecutePipeline(in, nil, nil) {
+			result = append(result, s.(int))
+		}
+
+		require.Equal(t, data, result)
+	})
+
+	t.Run("done without stages", func(t *testing.T) {
+		in := make(Bi)
+		done := make(Bi)
+		data := []int{1, 2, 3, 4, 5}
+
+		defer close(in)
+
+		go func() {
+			for _, v := range data {
+				in <- v
+			}
+			<-time.After(time.Second * 1)
+			close(done)
+		}()
+
+		result := make([]int, 0, 10)
+		for s := range ExecutePipeline(in, done) {
+			result = append(result, s.(int))
+		}
+
+		require.Equal(t, data, result)
 	})
 }
